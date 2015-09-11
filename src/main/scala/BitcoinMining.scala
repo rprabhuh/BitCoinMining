@@ -24,7 +24,6 @@ class Worker(numZeros: Int) extends Actor {
       var x = 0
       var y = 0
       while(flag) {
-        x = 0
         y = 0
         var randomstring = scala.util.Random.alphanumeric.take(15).mkString
         val sha = MessageDigest.getInstance("SHA-256")
@@ -32,7 +31,7 @@ class Worker(numZeros: Int) extends Actor {
         sha.update(stringwithseed.getBytes("UTF-8"))  
         val digest = sha.digest().map("%02X" format _).mkString
 
-        // Check for the reqd number of leading zeros
+        // Check for the required number of leading zeros
         for(x <- 0 to numZeros - 1) {
           if(digest.charAt(x) == '0')
             y = y + 1
@@ -95,6 +94,11 @@ class Listener extends Actor {
 object BitcoinMining extends App {
   override def main(args: Array[String]) {
 
+  if(args.length <1) {
+      println("NO ARGUMENT FOUND: Please the number of leading zeros as a command line argument.")
+      System.exit(1)
+  }
+
   if (isAllDigits(args(0)) == false) {
       println("INVALID ARGUMENT: Please specify a numeric argument.")
       System.exit(1)
@@ -102,7 +106,7 @@ object BitcoinMining extends App {
 
   // Get the command-line argument: Number of leading zeros in the hash
   val k = args(0).toInt 
-
+  
   // Create an Akka system
   val system = ActorSystem("BitcoinMining")
   val numWorkers = 10
