@@ -16,19 +16,31 @@ case class Output(bitcoin: String) extends BitcoinMessage
 
 //Create the worker
 class Worker(numZeros: Int) extends Actor {
-  val gatorid = "rprabhu"
-
-  var randomstring = scala.util.Random.alphanumeric.take(15).mkString
-  val sha = MessageDigest.getInstance("SHA-256")
-  val stringwithseed=gatorid+randomstring
-  sha.update(stringwithseed.getBytes("UTF-8"))  
-  val digest = sha.digest().map("%02X" format _).mkString; 
-  println(stringwithseed + "\t" + digest)
   
   def receive = {
-    case Mine(numZeros) => //println("Mining..")
-
-              sender ! Result("abcd");
+    case Mine(numZeros) => 
+      val gatorid = "rprabhu"
+      var flag = true
+      var x = 0
+      var y = 0
+      while(flag) {
+        x = 0
+        y = 0
+        var randomstring = scala.util.Random.alphanumeric.take(15).mkString
+        val sha = MessageDigest.getInstance("SHA-256")
+        val stringwithseed=gatorid+randomstring
+        sha.update(stringwithseed.getBytes("UTF-8"))  
+        val digest = sha.digest().map("%02X" format _).mkString; 
+        for(x <- 0 to numZeros) {
+          if(digest.charAt(x) == '0') {
+            y = y +1
+          }
+        }
+        if(y >= numZeros){
+            flag = false
+            sender ! Result(digest);
+        }
+      }
     case _ => println("INVALID")
   }
 
@@ -69,7 +81,7 @@ class Master(numWorkers: Int, numMessages: Int, numZeros: Int, listener: ActorRe
 class Listener extends Actor {
   def receive = {
     case Output(bitcoin) =>
-      //println("Got result: %s".format(bitcoin))
+      println("Got result: %s".format(bitcoin))
 
     case _ => println("INVALID")
   }
