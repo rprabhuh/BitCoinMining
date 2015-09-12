@@ -4,47 +4,88 @@ import akka.routing.RoundRobinRouter
 import scala.concurrent.duration.Duration
 import java.security.MessageDigest
 
-
 // Create the (immutable) base trait for messages
 sealed trait BitcoinMessage
 
 // Create the Messages
-case class Start(numZeros: Int) extends BitcoinMessage
+case class Start(ip: String) extends BitcoinMessage
 case class Mine(numZeros: Int) extends BitcoinMessage
 case class Result(bitcoinStr: String) extends BitcoinMessage
 case class Output(bitcoin: String, totalBitcoins: Int) extends BitcoinMessage
+case class RequestWork() extends BitcoinMessage
+case class Verify(randomString: String, numZeros: Int) extends BitcoinMessage
+case class SHAResult(found: Boolean, bcString: String) extends BitcoinMessage
 
-// Create the worker
-class Worker(numZeros: Int) extends Actor {
-  
-  def receive = {
-    case Mine(numZeros) => 
-      val gatorid = "rprabhu"
-      var flag = true
+//Create SHA Worker
+class SHAWorker() extends Actor {
+  def receive ={
+    case Verify(randomstring, numZeros) =>
       var x = 0
       var y = 0
-      while(flag) {
-        y = 0
-        var randomstring = scala.util.Random.alphanumeric.take(15).mkString
-        val sha = MessageDigest.getInstance("SHA-256")
-        val stringwithseed = gatorid + randomstring
-        sha.update(stringwithseed.getBytes("UTF-8"))  
-        val digest = sha.digest().map("%02X" format _).mkString
+      val sha = MessageDigest.getInstance("SHA-256")
+      sha.update(randomstring.getBytes("UTF-8"))  
+      val digest = sha.digest().map("%02X" format _).mkString
+      var found = false
 
-        // Check for the required number of leading zeros
-        for(x <- 0 to numZeros - 1) {
-          if(digest.charAt(x) == '0')
-            y = y + 1
-        }
+      // Check for the required number of leading zeros
+      for(x <- 0 to numZeros - 1) {
+        if(digest.charAt(x) == '0')
+          y = y + 1
+      }
 
-        if(y >= numZeros) {
-            flag = false
-            sender ! Result(stringwithseed + "\t" + digest)
+      if(y >= numZeros) {
+        found = true 
+      }
+      sender ! SHAResult(found, randomstring + "\t" + digest)
+    case _ =>
+      println("Error")
+  }
+}
+
+
+// Create the worker
+class Worker() extends Actor {
+  var masterRef = ""
+  var master:ActorRef = null
+  val gatorid = "rprabhu"
+  var randomstring = ""
+  val numshaWorkers = 10 
+  var numZeros = 0
+  var repliedtoMaster = false
+  def receive = {
+    case Start(ip) =>
+      masterRef = "akka.tcp://BitcoinMining@" + ip + ":3000/user/MasterActor"
+      master = context.actorFor(masterRef)
+      master ! RequestWork
+    case Mine(num) => 
+      numZeros = num
+      randomstring = scala.util.Random.alphanumeric.take(15).mkString
+
+      //Create a workerRouter
+      val SHAworkerRouter = context.actorOf(
+        Props[SHAWorker].withRouter(RoundRobinRouter(numshaWorkers)), name = "shaworkerRouter")
+
+      //Activate the workers 
+      for( i <- 0 until numshaWorkers) {
+        SHAworkerRouter ! Verify(gatorid+randomstring, numZeros)
+      }
+
+    case SHAResult(found, sha) =>
+      if(repliedtoMaster) {
+        context.stop(sender);
+      } else {
+        if(found) {
+          repliedtoMaster = true
+          master ! Result(sha)
+          context.stop(sender);
+        } else {
+          randomstring = scala.util.Random.alphanumeric.take(15).mkString
+          sender ! Verify(gatorid+randomstring, numZeros)
         }
       }
 
     case _ => println("INVALID MESSAGE")
-              System.exit(1)
+    System.exit(1)
   }
 }
 
@@ -53,20 +94,15 @@ class Worker(numZeros: Int) extends Actor {
 class Master(numWorkers: Int, numZeros: Int, listener: ActorRef) extends Actor {
 
   // Create the scheduling algorithm
-  val workerRouter = context.actorOf(
-  Props(new Worker(numZeros)).withRouter(RoundRobinRouter(numWorkers)), name = "workerRouter")
 
   def receive = {
-      case Start(numZeros) =>
-            for( i <- 0 until numWorkers) {
-                workerRouter ! Mine(numZeros)
-            }
+    case RequestWork =>
+      sender ! Mine(numZeros)
+    case Result(bitcoinStr) => 
+      listener ! Output(bitcoinStr, numWorkers) 
 
-      case Result(bitcoinStr) => 
-          listener ! Output(bitcoinStr, numWorkers) 
-
-      case _ => println("INVALID MESSAGE")
-          System.exit(1)
+    case _ => println("INVALID MESSAGE")
+    System.exit(1)
   }
 }
 
@@ -81,11 +117,12 @@ class Listener extends Actor {
     case Output(bitcoin, totalBitcoins) =>
       println("%s".format(bitcoin))
       workerFinished += 1
-      if (workerFinished == totalBitcoins)
-          System.exit(0)
+      if (workerFinished == totalBitcoins) {
+        System.exit(0)
+      }
 
     case _ => println("INVALID MESSAGE")
-          System.exit(1)
+    System.exit(1)
   }
 }
 
@@ -93,34 +130,46 @@ class Listener extends Actor {
 // Create the App
 object BitcoinMining extends App {
   override def main(args: Array[String]) {
+    var ip :String = "127.0.0.1"
 
-  if(args.length <1) {
-      println("NO ARGUMENT FOUND: Please the number of leading zeros as a command line argument.")
+    //Validate Input
+    if(args.length <1 || args.length>2) {
+      println("ERROR:Usage >run <num_leading_zeros> or\n >run <num_leading_zeros> <ip_address>") 
       System.exit(1)
-  }
+    }
 
-  if (isAllDigits(args(0)) == false) {
+    if (isAllDigits(args(0)) == false) {
       println("INVALID ARGUMENT: Please specify a numeric argument.")
       System.exit(1)
-  }
+    }
 
-  // Get the command-line argument: Number of leading zeros in the hash
-  val k = args(0).toInt 
-  
-  // Create an Akka system
-  val system = ActorSystem("BitcoinMining")
-  val numWorkers = 10
+    if (args.length == 2) {
+      ip = args(1)
+    }
 
-  // Create the listener
-  val listener = system.actorOf(Props[Listener], name = "listener")
- 
-  // Create the Master
-  val master = system.actorOf(Props(new Master(
+    // Get the command-line argument: Number of leading zeros in the hash
+    val k = args(0).toInt 
+
+    // Create an Akka system
+    val system = ActorSystem("BitcoinMining")
+    val numWorkers = 10 
+
+    //Create a workerRouter
+    val workerRouter = system.actorOf(
+      Props[Worker].withRouter(RoundRobinRouter(numWorkers)), name = "workerRouter")
+
+    // Create the listener
+    val listener = system.actorOf(Props[Listener], name = "listener")
+
+    // Create the Master
+    val master = system.actorOf(Props(new Master(
       numWorkers, k, listener)),
-      name = "master")
+  name = "MasterActor")
 
-  // Send the master the start message
-  master ! Start(k)
+    //Activate the workers 
+    for( i <- 0 until numWorkers) {
+      workerRouter ! Start(ip)
+    }
 
   }
 
