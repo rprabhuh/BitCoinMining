@@ -2,7 +2,10 @@ import akka.actor._
 import akka.actor.Props
 import akka.routing.RoundRobinRouter
 import scala.concurrent.duration.Duration
+import com.typesafe.config.ConfigFactory
 import java.security.MessageDigest
+import java.io.File
+
 
 // Create the (immutable) base trait for messages
 sealed trait BitcoinMessage
@@ -117,9 +120,9 @@ class Listener extends Actor {
     case Output(bitcoin, totalBitcoins) =>
       println("%s".format(bitcoin))
       workerFinished += 1
-      if (workerFinished == totalBitcoins) {
-        System.exit(0)
-      }
+//      if (workerFinished == totalBitcoins) {
+        //System.exit(0)
+ //     }
 
     case _ => println("INVALID MESSAGE")
     System.exit(1)
@@ -130,28 +133,34 @@ class Listener extends Actor {
 // Create the App
 object BitcoinMining extends App {
   override def main(args: Array[String]) {
-    var ip :String = "127.0.0.1"
+    var ip :String = ""
+    var k = 0
 
     //Validate Input
-    if(args.length <1 || args.length>2) {
-      println("ERROR:Usage >run <num_leading_zeros> or\n >run <num_leading_zeros> <ip_address>") 
+    if(args.length != 1) {
+      println("ERROR: Usage >run <num_leading_zeros> or\n >run <ip_address>") 
       System.exit(1)
     }
 
+    var configFile:String = ""
+    // When running as a client
     if (isAllDigits(args(0)) == false) {
-      println("INVALID ARGUMENT: Please specify a numeric argument.")
-      System.exit(1)
-    }
-
-    if (args.length == 2) {
-      ip = args(1)
-    }
-
+      ip = args(0)
+      configFile = getClass.getClassLoader.getResource("client_application.conf").getFile
+    } 
+    // When running as a server
+    else {
     // Get the command-line argument: Number of leading zeros in the hash
-    val k = args(0).toInt 
+      k = args(0).toInt 
+      configFile = getClass.getClassLoader.getResource("server_application.conf").getFile
+      ip = ConfigFactory.load("server_application").getString("akka.remote.netty.tcp.hostname")
+    }
 
     // Create an Akka system
-    val system = ActorSystem("BitcoinMining")
+    //val config = ConfigFactory.parseFile(new File(configFile))
+    println("IP: " + ip)
+    val config = ConfigFactory.parseFile(new File(configFile))
+    val system = ActorSystem("BitcoinMining", config)
     val numWorkers = 10 
 
     //Create a workerRouter
