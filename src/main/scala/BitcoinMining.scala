@@ -133,7 +133,7 @@ class Listener extends Actor {
 // Create the App
 object BitcoinMining extends App {
   override def main(args: Array[String]) {
-    var ip :String = ""
+    var ip:String = ""
     var k = 0
 
     //Validate Input
@@ -142,26 +142,23 @@ object BitcoinMining extends App {
       System.exit(1)
     }
 
-    var configFile:String = ""
     // When running as a client
     if (isAllDigits(args(0)) == false) {
       ip = args(0)
-      configFile = getClass.getClassLoader.getResource("client_application.conf").getFile
     } 
-    // When running as a server
+    // When running as a server/Master
     else {
     // Get the command-line argument: Number of leading zeros in the hash
       k = args(0).toInt 
-      configFile = getClass.getClassLoader.getResource("server_application.conf").getFile
-      ip = ConfigFactory.load("server_application").getString("akka.remote.netty.tcp.hostname")
     }
 
     // Create an Akka system
-    //val config = ConfigFactory.parseFile(new File(configFile))
-    println("IP: " + ip)
-    val config = ConfigFactory.parseFile(new File(configFile))
-    val system = ActorSystem("BitcoinMining", config)
+    val system = ActorSystem("BitcoinMining")
     val numWorkers = 10 
+    if (ip == "")
+        ip = ConfigFactory.load().getString("akka.remote.netty.tcp.hostname")
+    
+    println("IP: " + ip)
 
     //Create a workerRouter
     val workerRouter = system.actorOf(
