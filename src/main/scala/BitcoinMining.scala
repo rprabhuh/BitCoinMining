@@ -26,7 +26,6 @@ class SHAWorker() extends Actor {
   def receive ={
     case Verify(randomstring, numZeros) =>
       var startTime = System.currentTimeMillis()
-
       var x = 0
       var y = 0
       val sha = MessageDigest.getInstance("SHA-256")
@@ -43,7 +42,8 @@ class SHAWorker() extends Actor {
       if(y >= numZeros) {
         found = true 
       }
-      sender ! SHAResult(found, randomstring + "\t" + digest, System.currentTimeMillis() - startTime)
+      var totaltime = System.currentTimeMillis() - startTime
+      sender ! SHAResult(found, randomstring + "\t" + digest, totaltime)
     case _ =>
       println("Error")
   }
@@ -65,13 +65,13 @@ class Worker() extends Actor {
 
   def receive = {
     case Start(ip) =>
+      if (startTime == 0)
+      		startTime = System.currentTimeMillis()
       masterRef = "akka.tcp://BitcoinMining@" + ip + ":3000/user/MasterActor"
       master = context.actorFor(masterRef)
       master ! RequestWork
 
     case Mine(num) => 
-      if (startTime == 0)
-      		startTime = System.currentTimeMillis()
 
       numZeros = num
 
@@ -93,7 +93,7 @@ class Worker() extends Actor {
       } else {
         if(found) {
           repliedtoMaster = true
-          master ! Result(sha, stringsGenerated + numshaWorkers, timeSHA)
+          master ! Result(sha, stringsGenerated + numshaWorkers, System.currentTimeMillis()-startTime)
           context.stop(sender);
         } else {
           stringsGenerated += 1
@@ -114,12 +114,11 @@ class Master(numWorkers: Int, numZeros: Int, listener: ActorRef) extends Actor {
   var startTime = 0L
   var timeForWorkers = 0L
   var totalStrings = 0
-
+  
   def receive = {
     case RequestWork =>
-      if (startTime == 0)
-      		startTime = System.currentTimeMillis()
-      
+      if(startTime == 0)
+        startTime = System.currentTimeMillis()
       sender ! Mine(numZeros)
 
     case Result(bitcoinStr, stringsGenerated, timeTaken) => 
@@ -138,11 +137,14 @@ class Listener extends Actor {
 
   // Each worker will generate 1 bitcoin. And therefore, #bitcoins = #workers
   var workerFinished = 0
+  var realtime = 0L
 
   def receive = {
     case Output(bitcoin, totalBitcoins, totalStrings, timeTaken, timeForWorkers) =>
       println("%s".format(bitcoin))
       workerFinished += 1
+      realtime += timeTaken
+        println("Total time taken: Real time = " + realtime + "\tCPU Time = " + timeForWorkers)
       if (workerFinished == totalBitcoins) {
       	println("Work Units: " + totalStrings)
         println("Total time taken: Real time = " + timeTaken + "\tCPU Time = " + timeForWorkers)
