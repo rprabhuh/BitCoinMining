@@ -13,16 +13,20 @@ sealed trait BitcoinMessage
 // Create the Messages
 case class Start(ip: String) extends BitcoinMessage
 case class Mine(numZeros: Int) extends BitcoinMessage
-case class Result(bitcoinStr: String) extends BitcoinMessage
-case class Output(bitcoin: String, totalBitcoins: Int) extends BitcoinMessage
+case class Result(bitcoinStr: String, totalStrings: Int, timeTaken: Long) extends BitcoinMessage
+case class Output(bitcoin: String, totalBitcoins: Int, totalStrings: Int, timeTaken: Long, timeForWorkers: Long) extends BitcoinMessage
 case class RequestWork() extends BitcoinMessage
 case class Verify(randomString: String, numZeros: Int) extends BitcoinMessage
-case class SHAResult(found: Boolean, bcString: String) extends BitcoinMessage
+case class SHAResult(found: Boolean, bcString: String, timeTaken: Long) extends BitcoinMessage
+
 
 //Create SHA Worker
 class SHAWorker() extends Actor {
+
   def receive ={
     case Verify(randomstring, numZeros) =>
+      var startTime = System.currentTimeMillis()
+
       var x = 0
       var y = 0
       val sha = MessageDigest.getInstance("SHA-256")
@@ -39,7 +43,7 @@ class SHAWorker() extends Actor {
       if(y >= numZeros) {
         found = true 
       }
-      sender ! SHAResult(found, randomstring + "\t" + digest)
+      sender ! SHAResult(found, randomstring + "\t" + digest, System.currentTimeMillis() - startTime)
     case _ =>
       println("Error")
   }
@@ -55,14 +59,21 @@ class Worker() extends Actor {
   val numshaWorkers = 10 
   var numZeros = 0
   var repliedtoMaster = false
+  var startTime = 0L
+  var stringsGenerated = 0
+  var timeSHA = 0L
+
   def receive = {
     case Start(ip) =>
       masterRef = "akka.tcp://BitcoinMining@" + ip + ":3000/user/MasterActor"
       master = context.actorFor(masterRef)
       master ! RequestWork
+
     case Mine(num) => 
+      if (startTime == 0)
+      		startTime = System.currentTimeMillis()
+
       numZeros = num
-      randomstring = scala.util.Random.alphanumeric.take(15).mkString
 
       //Create a workerRouter
       val SHAworkerRouter = context.actorOf(
@@ -70,25 +81,29 @@ class Worker() extends Actor {
 
       //Activate the workers 
       for( i <- 0 until numshaWorkers) {
+        randomstring = scala.util.Random.alphanumeric.take(15).mkString
         SHAworkerRouter ! Verify(gatorid+randomstring, numZeros)
       }
 
-    case SHAResult(found, sha) =>
+    case SHAResult(found, sha, timeTaken) =>
+      timeSHA += timeTaken
+
       if(repliedtoMaster) {
         context.stop(sender);
       } else {
         if(found) {
           repliedtoMaster = true
-          master ! Result(sha)
+          master ! Result(sha, stringsGenerated + numshaWorkers, timeSHA)
           context.stop(sender);
         } else {
+          stringsGenerated += 1
           randomstring = scala.util.Random.alphanumeric.take(15).mkString
           sender ! Verify(gatorid+randomstring, numZeros)
         }
       }
 
     case _ => println("INVALID MESSAGE")
-    System.exit(1)
+    	System.exit(1)
   }
 }
 
@@ -96,16 +111,24 @@ class Worker() extends Actor {
 // Create the master 
 class Master(numWorkers: Int, numZeros: Int, listener: ActorRef) extends Actor {
 
-  // Create the scheduling algorithm
+  var startTime = 0L
+  var timeForWorkers = 0L
+  var totalStrings = 0
 
   def receive = {
     case RequestWork =>
+      if (startTime == 0)
+      		startTime = System.currentTimeMillis()
+      
       sender ! Mine(numZeros)
-    case Result(bitcoinStr) => 
-      listener ! Output(bitcoinStr, numWorkers) 
+
+    case Result(bitcoinStr, stringsGenerated, timeTaken) => 
+      timeForWorkers += timeTaken
+      totalStrings += stringsGenerated
+      listener ! Output(bitcoinStr, numWorkers, totalStrings, System.currentTimeMillis() - startTime, timeForWorkers) 
 
     case _ => println("INVALID MESSAGE")
-    System.exit(1)
+    	System.exit(1)
   }
 }
 
@@ -117,15 +140,17 @@ class Listener extends Actor {
   var workerFinished = 0
 
   def receive = {
-    case Output(bitcoin, totalBitcoins) =>
+    case Output(bitcoin, totalBitcoins, totalStrings, timeTaken, timeForWorkers) =>
       println("%s".format(bitcoin))
       workerFinished += 1
-//      if (workerFinished == totalBitcoins) {
-        //System.exit(0)
- //     }
+      if (workerFinished == totalBitcoins) {
+      	println("Work Units: " + totalStrings)
+        println("Total time taken: Real time = " + timeTaken + "\tCPU Time = " + timeForWorkers)
+        println("Parallelism: " + timeForWorkers/timeTaken)
+      }
 
     case _ => println("INVALID MESSAGE")
-    System.exit(1)
+    	System.exit(1)
   }
 }
 
@@ -133,6 +158,9 @@ class Listener extends Actor {
 // Create the App
 object BitcoinMining extends App {
   override def main(args: Array[String]) {
+
+  	//var progStartTime = System.currentTimeMillis()
+
     var ip:String = ""
     var k = 0
 
@@ -148,7 +176,7 @@ object BitcoinMining extends App {
     } 
     // When running as a server/Master
     else {
-    // Get the command-line argument: Number of leading zeros in the hash
+      // Get the command-line argument: Number of leading zeros in the hash
       k = args(0).toInt 
     }
 
@@ -157,8 +185,6 @@ object BitcoinMining extends App {
     val numWorkers = 10 
     if (ip == "")
         ip = ConfigFactory.load().getString("akka.remote.netty.tcp.hostname")
-    
-    println("IP: " + ip)
 
     //Create a workerRouter
     val workerRouter = system.actorOf(
@@ -169,14 +195,13 @@ object BitcoinMining extends App {
 
     // Create the Master
     val master = system.actorOf(Props(new Master(
-      numWorkers, k, listener)),
-  name = "MasterActor")
+        numWorkers, k, listener)),
+  		name = "MasterActor")
 
     //Activate the workers 
     for( i <- 0 until numWorkers) {
       workerRouter ! Start(ip)
     }
-
   }
 
   def isAllDigits(x: String) = x forall Character.isDigit
