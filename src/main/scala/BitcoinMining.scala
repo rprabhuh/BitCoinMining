@@ -138,17 +138,18 @@ class Listener extends Actor {
   // Each worker will generate 1 bitcoin. And therefore, #bitcoins = #workers
   var workerFinished = 0
   var realtime = 0L
+  var parallelism = 0F
 
   def receive = {
     case Output(bitcoin, totalBitcoins, totalStrings, timeTaken, timeForWorkers) =>
       println("%s".format(bitcoin))
       workerFinished += 1
       realtime += timeTaken
-        println("Total time taken: Real time = " + realtime + "\tCPU Time = " + timeForWorkers)
       if (workerFinished == totalBitcoins) {
       	println("Work Units: " + totalStrings)
-        println("Total time taken: Real time = " + timeTaken + "\tCPU Time = " + timeForWorkers)
-        println("Parallelism: " + timeForWorkers/timeTaken)
+        println("Real time = " + timeTaken + "\tCPU Time = " + timeForWorkers)
+        parallelism = timeForWorkers/timeTaken
+        println("Parallelism: " + parallelism)
       }
 
     case _ => println("INVALID MESSAGE")
