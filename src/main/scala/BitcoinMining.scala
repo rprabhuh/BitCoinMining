@@ -166,7 +166,7 @@ object BitcoinMining extends App {
 
     //Validate Input
     if(args.length != 1) {
-      println("ERROR: Usage >run <num_leading_zeros> or\n >run <ip_address>") 
+      println("ERROR: To run as server >run <num_leading_zeros> \n OR \n To run as client >run <ip_address>") 
       System.exit(1)
     }
 
