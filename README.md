@@ -1,51 +1,51 @@
------
-Team
------
+# Team
 Rahul Prabhu
+
 Sanil Sinai Borkar
 
-----------
-Compiling
-----------
+
+# Compiling
 SBT is used to build the code. To compile, just run the following command from the project root direcory
-
+```
 $ sbt compile
+```
 
---------
-Running 
---------
+
+# Running 
 
 SBT is used to run the code. To run as a master, just run the following command
-
+```
 $ sbt
 > run <number_of_leading_zeros>
+```
 
 To run as a client (worker), just run the following command
-
+```
 $ sbt
 > run <server_ip_address>
+```
 
 
-----------------------
-Command Line Arguments
-----------------------
+# Command Line Arguments
+
 
 When acting as a server, the code expects a non-negative integer less than 256 as a command line argument. This denotes the number of leading zeros required in the bitcoin.
+```
 > run <number_of_leading_zeros>
+```
 
 When acting as a client, the code expects an IP address of the server where the master is running.
+```
 > run <server_ip_address>
+```
 
 
 
--------------
-Architecture
--------------
+# Architecture
 
-
-											|===================|													|==============|
-											|  Result Listener  |													| 	SHAWorker  |
-											|===================|													|==============|
+```
+        									|===================|													|==============|
+											|  Result Listener  |													| 	SHAWorker  |							|===================|													|==============|
 														^																^		|
 														|																|		|
 														|																|		|
@@ -53,33 +53,32 @@ Architecture
 														|														numZeros)			timeTaken)
 														|																|		|	
 														|																|		v
-|=========================|						|============|---------------------RequestWork--------------------->|==============|
+|=========================|						|============|<---------------------RequestWork---------------------|==============|
 |     BitcoinMining       |------Start(ip)----->|   Master   |--------------------Mine(numZeros)------------------->|    Worker    |  
 |=========================|						|============|<----Result(bitcoinStr, totalStrings, timeTaken)------|==============|
+```
 
-   
+The *application.conf* requires the IP address and the port of the system on which it will listen for incoming (worker) connections. In this case, the system will act as the master for the incoming worker connections.
 
-The 'application.conf' requires the IP address and the port of the system on which it will listen for incoming (worker) connections. In this case, the system will act as the master for the incoming worker connections.
-
-When running the program, the gator ID 'rprabhu' was used as a prefix for generating strings.
+When running the program, the gator ID '*rprabhu*' was used as a prefix for generating strings.
 
 
-----------------------
-Size of the work unit
-----------------------
+
+# Size of the work unit
+
 We carried out various experiments, and found the below mentioned work unit size to be the best one. This was achieved by a total of 100 actors.
 
-Work Unit Size		Real Time (ms)		CPU Time (ms)		Parallelism Achieved
-	429248				 8572				52610				6.137424172
-	574100				10618				73232				6.896967414
-   13284961			   207619			   1122734				5.407665002
+| Work Unit Size | Real Time (ms) | CPU Time (ms) |	Parallelism Achieved |
+|----------------|--------------------------------|----------------------|
+|	429248	| 8572		|		52610			|	6.137424172 |
+|	574100	| 10618 		|		73232			|	6.896967414 |
+|   13284961	|	 207619		|	   1122734			|	5.407665002 |
 
 
---------------------------
-Result for 4 leading zeros
---------------------------
+
+# Result for 4 leading zeros
 The code was run on 8-core machine. The results for finding 4 leading zeros when the master was run on this machine are given below. Time was measured in milliseconds.
-
+```
 rprabhu@XPS:~/Coding/bitcoinmining$ sbt
 Picked up JAVA_TOOL_OPTIONS: -javaagent:/usr/share/java/jayatanaag.jar 
 [info] Set current project to My Project (in build file:/home/rprabhu/Coding/bitcoinmining/)
@@ -101,14 +100,13 @@ rprabhuPFFhA1nn5KO73ZE	000061BF03193CC30C93114F6732CDC9E9DD95C4A475C4E9503DBB944
 Work Units: 574100
 Real time = 10618	CPU Time = 73232
 Parallelism: 6.896967414
+```
 
 
 
-------------------------------------------
-Running Time when run for 5 leading zeros
-------------------------------------------
+# Running Time when run for 5 leading zeros
 The code was run on 8-core machine. The results for finding 4 leading zeros when the master was run on this machine are given below. Time was measured in milliseconds.
-
+```
 rprabhu@XPS:~/Coding/bitcoinmining$ sbt
 Picked up JAVA_TOOL_OPTIONS: -javaagent:/usr/share/java/jayatanaag.jar 
 [info] Set current project to My Project (in build file:/home/rprabhu/Coding/bitcoinmining/)
@@ -130,20 +128,22 @@ rprabhu7sgGeYgaiq9pkWP	00000A5FEE0D3918CB2AE7659F85EBD32ED7DB9C853913A9BFE189A23
 Work Units: 13284961
 Real time = 207619	CPU Time = 1122734
 Parallelism: 5.407665002
+```
 
 
 
--------------------
-Coins with most 0s
--------------------
+# Coins with most 0s
 Six
+```
 rprabhuUhy1kRPq9HbtjpT 00000055AE93BCF43426353C93C508F3ECE801BC012D9324BDDCF8CFEB01F903
 rprabhuOZp83966eR57BBP 000000900A66493B749545610A9237AB1A7FFE390266F7F8F5B1DCE67E511B15
+```
 
 Seven
+```
 rprabhuNL5nGdxoG8X23m2	00000008FCBE037E17C6651B0BA6AFAC852C1B421F9E39C8EDA9B3945BD93972
+```
 
-----------------------------------------
-Largest Number of Working Machines Used
-----------------------------------------
+
+# Largest Number of Working Machines Used
 Three. The 8-core machine acted as the server.
